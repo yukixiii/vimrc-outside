@@ -1,0 +1,9 @@
+{
+	"id": "vimrc-outside",
+	"name": "Vimrc Outside",
+	"version": "0.1.0",
+	"minAppVersion": "1.6.6",
+	"description": "Run the normal-mode mappings from your .obsidian.vimrc when no editor has focus: empty tabs, reading view, sidebars and other views.",
+	"author": "yuki",
+	"isDesktopOnly": false
+}

@@ -1,0 +1,7 @@
+.vimrc-outside-pending {
+	font-family: var(--font-monospace);
+}
+
+.vimrc-outside-mappings td {
+	padding: 2px 12px 2px 0;
+}
