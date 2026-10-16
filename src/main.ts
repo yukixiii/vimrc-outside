@@ -1,9 +1,12 @@
 import { Notice, Plugin } from "obsidian";
+import { CommandLine } from "./commandline";
 import { shouldHandle } from "./context";
+import { parseExLine } from "./exline";
+import { turnImeOff } from "./ime";
 import { eventToken } from "./keys";
 import { Matcher } from "./matcher";
-import { loadSettings, VimrcOutsideSettingTab, type VimrcOutsideSettings } from "./settings";
-import { parseVimrc, type Mapping } from "./vimrc";
+import { HISTORY_LIMIT, loadSettings, VimrcOutsideSettingTab, type VimrcOutsideSettings } from "./settings";
+import { parseVimrc, type Mapping, type ParsedVimrc } from "./vimrc";
 
 const DEFAULT_VIMRC = ".obsidian.vimrc";
 const VIMRC_SUPPORT_ID = "obsidian-vimrc-support";
@@ -11,6 +14,11 @@ const VIMRC_SUPPORT_ID = "obsidian-vimrc-support";
 export default class VimrcOutsidePlugin extends Plugin {
 	settings!: VimrcOutsideSettings;
 	loaded: { mappings: Mapping[]; error: string | null } = { mappings: [], error: null };
+	private exTable: Pick<ParsedVimrc, "exCommands" | "editorExCommands"> = {
+		exCommands: new Map(),
+		editorExCommands: new Set(),
+	};
+	private commandLine: CommandLine | null = null;
 	private matcher = new Matcher([]);
 	private timer: number | null = null;
 	private statusEl: HTMLElement | null = null;
@@ -33,7 +41,10 @@ export default class VimrcOutsidePlugin extends Plugin {
 
 		this.listen(window);
 		this.registerEvent(this.app.workspace.on("window-open", (_w, win) => this.listen(win)));
-		this.register(() => this.clearPending());
+		this.register(() => {
+			this.clearPending();
+			this.commandLine?.close();
+		});
 
 		// After layout ready, so Vimrc Support's settings are loaded.
 		this.app.workspace.onLayoutReady(() => this.reloadVimrc(false));
@@ -58,12 +69,14 @@ export default class VimrcOutsidePlugin extends Plugin {
 			const stat = await adapter.stat(path);
 			const parsed = parseVimrc(await adapter.read(path));
 			this.loaded = { mappings: parsed.mappings, error: null };
+			this.exTable = parsed;
 			this.loadedMtime = stat?.mtime ?? null;
 			if (parsed.skipped.length > 0) {
 				console.debug(`vimrc-outside: skipped ${parsed.skipped.length} mappings that don't run an Obsidian command`, parsed.skipped);
 			}
 		} catch (e) {
 			this.loaded = { mappings: [], error: `Could not read the vimrc: ${(e as Error).message}` };
+			this.exTable = { exCommands: new Map(), editorExCommands: new Set() };
 			this.loadedMtime = null;
 		}
 		this.loadedPath = path;
@@ -97,6 +110,12 @@ export default class VimrcOutsidePlugin extends Plugin {
 		}
 		const token = eventToken(e);
 		if (!token) return;
+		if (token === ":" && this.settings.commandLine && !this.matcher.isPending && !this.matcher.startsMapping(":")) {
+			e.preventDefault();
+			e.stopPropagation();
+			this.openCommandLine((e.target as Node | null)?.ownerDocument ?? document);
+			return;
+		}
 		const { run, consumed } = this.matcher.feed(token);
 		if (consumed) {
 			e.preventDefault();
@@ -104,6 +123,36 @@ export default class VimrcOutsidePlugin extends Plugin {
 		}
 		this.updatePending();
 		for (const id of run) this.execute(id);
+	}
+
+	private openCommandLine(doc: Document): void {
+		this.commandLine?.close();
+		turnImeOff(this.settings.imeOffCommand);
+		this.commandLine = new CommandLine(doc, {
+			history: this.settings.exHistory,
+			exNames: () => this.exTable.exCommands.keys(),
+			commandIds: () => Object.keys(this.app.commands.commands),
+			onSubmit: (line) => {
+				this.commandLine = null;
+				this.runExLine(line);
+			},
+		});
+	}
+
+	private runExLine(line: string): void {
+		const result = parseExLine(line, this.exTable);
+		if (result.kind === "empty") return;
+		const entry = line.trim().replace(/^:+\s*/, "");
+		this.settings.exHistory = [entry, ...this.settings.exHistory.filter((h) => h !== entry)].slice(0, HISTORY_LIMIT);
+		void this.saveSettings();
+		if (result.kind === "command") {
+			if (!this.app.commands.commands[result.id]) new Notice(`vimrc-outside: no command ${result.id}`);
+			else this.execute(result.id);
+		} else if (result.kind === "editor-only") {
+			new Notice(`vimrc-outside: :${result.name} needs an editor`);
+		} else {
+			new Notice(`E492: Not an editor command: ${result.name}`);
+		}
 	}
 
 	private execute(id: string): void {

@@ -15,6 +15,10 @@ export interface ParsedVimrc {
 	mappings: Mapping[];
 	/** Normal-mode mappings that were left out because they don't run an Obsidian command. */
 	skipped: { lhs: string; rhs: string; line: number }[];
+	/** exmap name → command id, for exmaps that run an Obsidian command. */
+	exCommands: Map<string, string>;
+	/** Other exmap names (surround, pasteinto, ...), which need the editor. */
+	editorExCommands: Set<string>;
 }
 
 const MAP_COMMANDS = new Set(["map", "nmap", "noremap", "nnoremap", "nm", "nn", "no"]);
@@ -23,6 +27,7 @@ const MAP_ARGS = new Set(["<silent>", "<buffer>", "<nowait>", "<expr>", "<unique
 
 export function parseVimrc(text: string): ParsedVimrc {
 	const exCommands = new Map<string, string>();
+	const editorExCommands = new Set<string>();
 	// Keyed by the joined tokens so "<C-W>l" and "<C-w>l" are the same mapping.
 	const pending = new Map<string, { lhs: string; keys: string[]; rhs: string; line: number }>();
 
@@ -33,8 +38,14 @@ export function parseVimrc(text: string): ParsedVimrc {
 		const cmd = words[0];
 		if (cmd === "exmap") {
 			// exmap <name> obcommand <id>
-			if (words[2] === "obcommand" && words[3]) exCommands.set(words[1], words[3]);
-			else exCommands.delete(words[1]);
+			if (!words[1]) return;
+			if (words[2] === "obcommand" && words[3]) {
+				exCommands.set(words[1], words[3]);
+				editorExCommands.delete(words[1]);
+			} else {
+				exCommands.delete(words[1]);
+				editorExCommands.add(words[1]);
+			}
 			return;
 		}
 		if (MAP_COMMANDS.has(cmd)) {
@@ -55,7 +66,7 @@ export function parseVimrc(text: string): ParsedVimrc {
 		}
 	});
 
-	const result: ParsedVimrc = { mappings: [], skipped: [] };
+	const result: ParsedVimrc = { mappings: [], skipped: [], exCommands, editorExCommands };
 	// Ex commands resolve when the mapping runs, so a mapping may refer to an exmap defined later.
 	for (const m of pending.values()) {
 		const id = commandFor(m.rhs, exCommands);

@@ -5,3 +5,50 @@
 .vimrc-outside-mappings td {
 	padding: 2px 12px 2px 0;
 }
+
+.vimrc-outside-cmdline {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: var(--layer-notice);
+	background: var(--background-secondary);
+	border-top: 1px solid var(--background-modifier-border);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-medium);
+}
+
+.vimrc-outside-cmdline-row {
+	display: flex;
+	align-items: center;
+	padding: 2px 8px;
+}
+
+.vimrc-outside-cmdline input[type="text"].vimrc-outside-cmdline-input,
+.vimrc-outside-cmdline input[type="text"].vimrc-outside-cmdline-input:hover,
+.vimrc-outside-cmdline input[type="text"].vimrc-outside-cmdline-input:focus,
+.vimrc-outside-cmdline input[type="text"].vimrc-outside-cmdline-input:focus-visible {
+	flex: 1;
+	border: none;
+	outline: none;
+	box-shadow: none;
+	background: transparent;
+	padding: 0 0 0 1px;
+	height: auto;
+	font: inherit;
+}
+
+.vimrc-outside-wildmenu {
+	display: flex;
+	gap: 12px;
+	overflow-x: auto;
+	white-space: nowrap;
+	padding: 2px 8px;
+	background: var(--background-primary-alt);
+	scrollbar-width: none;
+}
+
+.vimrc-outside-wildmenu-item.is-selected {
+	background: var(--text-selection);
+	color: var(--text-normal);
+}

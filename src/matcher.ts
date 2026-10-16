@@ -45,6 +45,11 @@ export class Matcher {
 		return this.pending.length > 0;
 	}
 
+	/** Whether some mapping starts with this key. */
+	startsMapping(token: string): boolean {
+		return this.root.children.has(token);
+	}
+
 	feed(token: string): FeedResult {
 		if (token === ESC && this.pending.length > 0 && !this.walk([...this.pending, token])) {
 			this.reset();

@@ -1,4 +1,5 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
+import { defaultImeOffCommand } from "./ime";
 import type VimrcOutsidePlugin from "./main";
 
 export interface VimrcOutsideSettings {
@@ -7,12 +8,23 @@ export interface VimrcOutsideSettings {
 	/** Like vim's 'timeoutlen'. */
 	timeoutMs: number;
 	showPendingKeys: boolean;
+	/** Open a command line with ":". */
+	commandLine: boolean;
+	/** Shell command run when the command line opens. Empty: none. */
+	imeOffCommand: string;
+	/** Command line history, newest first. */
+	exHistory: string[];
 }
+
+export const HISTORY_LIMIT = 100;
 
 export const DEFAULT_SETTINGS: VimrcOutsideSettings = {
 	vimrcPath: "",
 	timeoutMs: 1000,
 	showPendingKeys: true,
+	commandLine: true,
+	imeOffCommand: defaultImeOffCommand(),
+	exHistory: [],
 };
 
 export function loadSettings(data: unknown): VimrcOutsideSettings {
@@ -20,6 +32,11 @@ export function loadSettings(data: unknown): VimrcOutsideSettings {
 	if (typeof s.vimrcPath !== "string") s.vimrcPath = DEFAULT_SETTINGS.vimrcPath;
 	if (!Number.isFinite(s.timeoutMs) || s.timeoutMs < 0) s.timeoutMs = DEFAULT_SETTINGS.timeoutMs;
 	s.showPendingKeys = s.showPendingKeys !== false;
+	s.commandLine = s.commandLine !== false;
+	if (typeof s.imeOffCommand !== "string") s.imeOffCommand = DEFAULT_SETTINGS.imeOffCommand;
+	s.exHistory = Array.isArray(s.exHistory)
+		? s.exHistory.filter((h): h is string => typeof h === "string").slice(0, HISTORY_LIMIT)
+		: [];
 	return s;
 }
 
@@ -72,6 +89,26 @@ export class VimrcOutsideSettingTab extends PluginSettingTab {
 			.addToggle((t) =>
 				t.setValue(p.settings.showPendingKeys).onChange(async (v) => {
 					p.settings.showPendingKeys = v;
+					await p.saveSettings();
+				}),
+			);
+
+		new Setting(containerEl).setName("Command line").setHeading();
+		new Setting(containerEl)
+			.setName("Open the command line with :")
+			.setDesc("Run exmaps from the vimrc (e.g. :q, :vsplit) or :obcommand <id>. Tab completes, Up/Down browse the history.")
+			.addToggle((t) =>
+				t.setValue(p.settings.commandLine).onChange(async (v) => {
+					p.settings.commandLine = v;
+					await p.saveSettings();
+				}),
+			);
+		new Setting(containerEl)
+			.setName("IME off command")
+			.setDesc("Shell command run when the command line opens, to switch the IME off (e.g. fcitx5-remote -c, im-select com.apple.keylayout.ABC). Leave empty to do nothing.")
+			.addText((t) =>
+				t.setValue(p.settings.imeOffCommand).onChange(async (v) => {
+					p.settings.imeOffCommand = v.trim();
 					await p.saveSettings();
 				}),
 			);
